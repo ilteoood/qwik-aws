@@ -7,18 +7,10 @@
  * - https://qwik.builder.io/integrations/deployments/node/
  *
  */
-import { createQwikCity, type PlatformNode } from '@builder.io/qwik-city/middleware/node';
+// eslint-disable-next-line
 import qwikCityPlan from '@qwik-city-plan';
 import { manifest } from '@qwik-client-manifest';
+import { createQwikCity } from './createQwikCity';
 import render from './entry.ssr';
 
-
-declare global {
-    interface QwikCityPlatform extends PlatformNode { }
-}
-
-createQwikCity({ render, qwikCityPlan, manifest });
-
-export const handler = (event: any) => {
-    return render({base: event.request.uri})
-}
+export const handler = createQwikCity({ render, qwikCityPlan, manifest });
