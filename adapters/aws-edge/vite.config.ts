@@ -13,7 +13,7 @@ export default extendConfig(baseConfig, () => {
     },
     plugins: [azureSwaAdapter()],
     ssr: {
-      noExternal: ['crypto']
+      noExternal: /^((?!crypto).)*$/,
     },
   };
 });

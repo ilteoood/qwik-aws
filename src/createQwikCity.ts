@@ -12,6 +12,7 @@ import type { Render } from '@builder.io/qwik/server';
 import { setServerPlatform } from '@builder.io/qwik/server';
 import qwikCityPlan from '@qwik-city-plan';
 import type { APIGatewayEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { Request } from 'undici';
 
 /**
  * @alpha
