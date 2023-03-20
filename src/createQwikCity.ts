@@ -15,7 +15,6 @@ import {
 import type { Render } from '@builder.io/qwik/server';
 import { setServerPlatform } from '@builder.io/qwik/server';
 import qwikCityPlan from '@qwik-city-plan';
-import { isStaticPath } from '@qwik-city-static-paths';
 import type { APIGatewayProxyResult, Context } from 'aws-lambda';
 import { readFile } from 'fs/promises';
 import { extname, join, resolve } from 'path';
