@@ -2,20 +2,106 @@ import type { RenderOptions } from '@builder.io/qwik';
 import {
 	_deserializeData,
 	_serializeData,
-	_verifySerializable,
+	_verifySerializable
 } from '@builder.io/qwik';
 import type {
 	ServerRenderOptions,
-	ServerRequestEvent,
+	ServerRequestEvent
 } from '@builder.io/qwik-city/middleware/request-handler';
 import {
 	mergeHeadersCookies,
-	requestHandler,
+	requestHandler
 } from '@builder.io/qwik-city/middleware/request-handler';
 import type { Render } from '@builder.io/qwik/server';
 import { setServerPlatform } from '@builder.io/qwik/server';
 import qwikCityPlan from '@qwik-city-plan';
+import { isStaticPath } from '@qwik-city-static-paths';
 import type { APIGatewayProxyResult, Context } from 'aws-lambda';
+import { readFile } from 'fs/promises';
+import { extname, join, resolve } from 'path';
+
+/**
+ * Common mime types mapped to Content-Type headers
+ */
+const MIME_TYPES: { [ext: string]: string } = {
+	'3gp': 'video/3gpp',
+	'3gpp': 'video/3gpp',
+	asf: 'video/x-ms-asf',
+	asx: 'video/x-ms-asf',
+	avi: 'video/x-msvideo',
+	avif: 'image/avif',
+	bmp: 'image/x-ms-bmp',
+	css: 'text/css',
+	flv: 'video/x-flv',
+	gif: 'image/gif',
+	htm: 'text/html',
+	html: 'text/html',
+	ico: 'image/x-icon',
+	jng: 'image/x-jng',
+	jpeg: 'image/jpeg',
+	jpg: 'image/jpeg',
+	js: 'application/javascript',
+	json: 'application/json',
+	kar: 'audio/midi',
+	m4a: 'audio/x-m4a',
+	m4v: 'video/x-m4v',
+	mid: 'audio/midi',
+	midi: 'audio/midi',
+	mng: 'video/x-mng',
+	mov: 'video/quicktime',
+	mp3: 'audio/mpeg',
+	mp4: 'video/mp4',
+	mpeg: 'video/mpeg',
+	mpg: 'video/mpeg',
+	ogg: 'audio/ogg',
+	pdf: 'application/pdf',
+	png: 'image/png',
+	rar: 'application/x-rar-compressed',
+	shtml: 'text/html',
+	svg: 'image/svg+xml',
+	svgz: 'image/svg+xml',
+	tif: 'image/tiff',
+	tiff: 'image/tiff',
+	ts: 'video/mp2t',
+	txt: 'text/plain',
+	wbmp: 'image/vnd.wap.wbmp',
+	webm: 'video/webm',
+	webp: 'image/webp',
+	wmv: 'video/x-ms-wmv',
+	woff: 'font/woff',
+	woff2: 'font/woff2',
+	xml: 'text/xml',
+	zip: 'application/zip',
+};
+
+const staticPaths = new Set(["/favicon.svg", "/manifest.json", "/q-manifest.json", "/robots.txt", "/service-worker.js"]);
+function isStaticPath(method: string, url: URL) {
+	console.log('isStaticPath', method, url);
+	if (method.toUpperCase() !== 'GET') {
+		return false;
+	}
+	const p = url.pathname;
+	if (p.startsWith("/build/")) {
+		return true;
+	}
+	if (p.startsWith("/assets/")) {
+		return true;
+	}
+	if (staticPaths.has(p)) {
+		return true;
+	}
+	if (p.endsWith('/q-data.json')) {
+		const pWithoutQdata = p.replace(/\/q-data.json$/, '');
+		if (staticPaths.has(pWithoutQdata + '/')) {
+			return true;
+		}
+		if (staticPaths.has(pWithoutQdata)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 
 /**
  * @alpha
@@ -29,6 +115,9 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 	if (opts.manifest) {
 		setServerPlatform(opts.manifest);
 	}
+
+	const staticFolder = resolve(join(import.meta.url, '..', 'static'));
+
 	async function handler(event: any, context: Context): Promise<any> {
 		console.log('context', JSON.stringify(event), JSON.stringify(context));
 
@@ -36,10 +125,25 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 		const fullPath = `https://${
 			event.Records[0].cf.config.distributionDomainName
 		}${request.uri}${request.querystring ? `?${request.querystring}` : ''}`;
+		const requestMethod = request.method || 'GET';
 		try {
 			const url = new URL(fullPath);
+
+			if (isStaticPath(requestMethod, url)) {
+				const staticFilePath = join(staticFolder, url.pathname);
+				const staticFileContent = await readFile(staticFilePath, 'utf8');
+
+				console.log('STATIC FILE', staticFolder, staticFilePath, staticFileContent);
+
+				return {
+					status: 200,
+					body: staticFileContent,
+					headers: { 'Content-Type': MIME_TYPES[extname(staticFilePath).replace(/^\./, '')]}
+				};
+			}
+
 			const options: RequestInit = {
-				method: event.httpMethod || 'GET',
+				method: requestMethod || 'GET',
 				headers: [],
 				body: event.body,
 			};
@@ -102,7 +206,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 				});
 				const response = await handledResponse.response;
 				console.log('----response----', response);
-				
+
 				if (response) {
 					return response;
 				}
