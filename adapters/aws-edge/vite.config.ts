@@ -7,7 +7,7 @@ export default extendConfig(baseConfig, () => {
     build: {
       ssr: true,
       rollupOptions: {
-        input: ['src/entry.aws-edge.tsx', '@qwik-city-plan']
+        input: ['src/entry-aws-edge.tsx', '@qwik-city-plan']
       },
       outDir: 'aws'
     },
