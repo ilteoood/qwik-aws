@@ -2,15 +2,15 @@ import type { RenderOptions } from '@builder.io/qwik';
 import {
 	_deserializeData,
 	_serializeData,
-	_verifySerializable
+	_verifySerializable,
 } from '@builder.io/qwik';
 import type {
 	ServerRenderOptions,
-	ServerRequestEvent
+	ServerRequestEvent,
 } from '@builder.io/qwik-city/middleware/request-handler';
 import {
 	mergeHeadersCookies,
-	requestHandler
+	requestHandler,
 } from '@builder.io/qwik-city/middleware/request-handler';
 import type { Render } from '@builder.io/qwik/server';
 import { setServerPlatform } from '@builder.io/qwik/server';
@@ -73,17 +73,23 @@ const MIME_TYPES: { [ext: string]: string } = {
 	zip: 'application/zip',
 };
 
-const staticPaths = new Set(["/favicon.svg", "/manifest.json", "/q-manifest.json", "/robots.txt", "/service-worker.js"]);
+const staticPaths = new Set([
+	'/favicon.svg',
+	'/manifest.json',
+	'/q-manifest.json',
+	'/robots.txt',
+	'/service-worker.js',
+]);
 function isStaticPath(method: string, url: URL) {
 	console.log('isStaticPath', method, url);
 	if (method.toUpperCase() !== 'GET') {
 		return false;
 	}
 	const p = url.pathname;
-	if (p.startsWith("/build/")) {
+	if (p.startsWith('/build/')) {
 		return true;
 	}
-	if (p.startsWith("/assets/")) {
+	if (p.startsWith('/assets/')) {
 		return true;
 	}
 	if (staticPaths.has(p)) {
@@ -101,7 +107,6 @@ function isStaticPath(method: string, url: URL) {
 	return false;
 }
 
-
 /**
  * @alpha
  */
@@ -115,7 +120,13 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 		setServerPlatform(opts.manifest);
 	}
 
-	const staticFolder = resolve(join(import.meta.url, '..', 'static'));
+	let staticFolder = resolve(join(import.meta.url, 'static'));
+	console.log('static folder1', staticFolder);
+	if (process.env.LAMBDA_TASK_ROOT) {
+		staticFolder = resolve(join(process.env.LAMBDA_TASK_ROOT, 'static'));
+	}
+
+	console.log('static folder2', staticFolder);
 
 	async function handler(event: any, context: Context): Promise<any> {
 		console.log('context', JSON.stringify(event), JSON.stringify(context));
@@ -130,14 +141,31 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 
 			if (isStaticPath(requestMethod, url)) {
 				const staticFilePath = join(staticFolder, url.pathname);
+				console.log('STATIC FILE1', staticFolder, staticFilePath);
+
 				const staticFileContent = await readFile(staticFilePath, 'utf8');
 
-				console.log('STATIC FILE', staticFolder, staticFilePath, staticFileContent);
+				console.log(
+					'STATIC FILE2',
+					staticFolder,
+					staticFilePath,
+					staticFileContent,
+					'---------',
+					extname(staticFilePath).replace(/^\./, ''),
+					MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
+					mapHeadersToAwsHeaders({
+						'Content-Type':
+							MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
+					})
+				);
 
 				return {
 					status: 200,
 					body: staticFileContent,
-					headers: { 'Content-Type': MIME_TYPES[extname(staticFilePath).replace(/^\./, '')]}
+					headers: mapHeadersToAwsHeaders({
+						'Content-Type':
+							MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
+					}),
 				};
 			}
 
@@ -256,7 +284,7 @@ const mapHeadersToAwsHeaders = (headers = {}) => {
 	const awsHeaders: any = {};
 	console.log('headers', headers);
 	Object.entries(headers).forEach(([key, value]) => {
-		awsHeaders[key] = [{ key, value }];
+		awsHeaders[key.toLocaleLowerCase()] = [{ key, value }];
 	});
 	console.log('awsHeaders', awsHeaders);
 	return awsHeaders;
