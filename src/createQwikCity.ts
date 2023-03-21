@@ -16,62 +16,10 @@ import type { Render } from '@builder.io/qwik/server';
 import { setServerPlatform } from '@builder.io/qwik/server';
 import qwikCityPlan from '@qwik-city-plan';
 import type { APIGatewayProxyResult, Context } from 'aws-lambda';
-import { readFile } from 'fs/promises';
-import { extname, join, resolve } from 'path';
 
-/**
- * Common mime types mapped to Content-Type headers
- */
-const MIME_TYPES: { [ext: string]: string } = {
-	'3gp': 'video/3gpp',
-	'3gpp': 'video/3gpp',
-	asf: 'video/x-ms-asf',
-	asx: 'video/x-ms-asf',
-	avi: 'video/x-msvideo',
-	avif: 'image/avif',
-	bmp: 'image/x-ms-bmp',
-	css: 'text/css',
-	flv: 'video/x-flv',
-	gif: 'image/gif',
-	htm: 'text/html',
-	html: 'text/html',
-	ico: 'image/x-icon',
-	jng: 'image/x-jng',
-	jpeg: 'image/jpeg',
-	jpg: 'image/jpeg',
-	js: 'application/javascript',
-	json: 'application/json',
-	kar: 'audio/midi',
-	m4a: 'audio/x-m4a',
-	m4v: 'video/x-m4v',
-	mid: 'audio/midi',
-	midi: 'audio/midi',
-	mng: 'video/x-mng',
-	mov: 'video/quicktime',
-	mp3: 'audio/mpeg',
-	mp4: 'video/mp4',
-	mpeg: 'video/mpeg',
-	mpg: 'video/mpeg',
-	ogg: 'audio/ogg',
-	pdf: 'application/pdf',
-	png: 'image/png',
-	rar: 'application/x-rar-compressed',
-	shtml: 'text/html',
-	svg: 'image/svg+xml',
-	svgz: 'image/svg+xml',
-	tif: 'image/tiff',
-	tiff: 'image/tiff',
-	ts: 'video/mp2t',
-	txt: 'text/plain',
-	wbmp: 'image/vnd.wap.wbmp',
-	webm: 'video/webm',
-	webp: 'image/webp',
-	wmv: 'video/x-ms-wmv',
-	woff: 'font/woff',
-	woff2: 'font/woff2',
-	xml: 'text/xml',
-	zip: 'application/zip',
-};
+export function getNotFound(_pathname: string) {
+	return 'Resource Not Found ' + _pathname;
+}
 
 const staticPaths = new Set([
 	'/favicon.svg',
@@ -81,7 +29,6 @@ const staticPaths = new Set([
 	'/service-worker.js',
 ]);
 function isStaticPath(method: string, url: URL) {
-	console.log('isStaticPath', method, url);
 	if (method.toUpperCase() !== 'GET') {
 		return false;
 	}
@@ -107,6 +54,11 @@ function isStaticPath(method: string, url: URL) {
 	return false;
 }
 
+const defaultHeaders = {
+	'cache-control': 'max-age=100',
+	'content-type': 'text/html; charset=utf-8',
+};
+
 /**
  * @alpha
  */
@@ -120,60 +72,31 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 		setServerPlatform(opts.manifest);
 	}
 
-	let staticFolder = resolve(join(import.meta.url, 'static'));
-	console.log('static folder1', staticFolder);
-	if (process.env.LAMBDA_TASK_ROOT) {
-		staticFolder = resolve(join(process.env.LAMBDA_TASK_ROOT, 'static'));
-	}
-
-	console.log('static folder2', staticFolder);
-
 	async function handler(event: any, context: Context): Promise<any> {
-		console.log('context', JSON.stringify(event), JSON.stringify(context));
-
 		const request = event.Records[0].cf.request;
-		const fullPath = `https://${
-			event.Records[0].cf.config.distributionDomainName
-		}${request.uri}${request.querystring ? `?${request.querystring}` : ''}`;
-		const requestMethod = request.method || 'GET';
+
+		const distributionDomainName =
+			event.Records[0].cf.config.distributionDomainName;
+		const querystring = request.querystring ? `?${request.querystring}` : '';
+
+		const fullPath = `https://${distributionDomainName}${request.uri}${querystring}`;
+		const url = new URL(fullPath);
+
 		try {
-			const url = new URL(fullPath);
-
-			if (isStaticPath(requestMethod, url)) {
-				const staticFilePath = join(staticFolder, url.pathname);
-				console.log('STATIC FILE1', staticFolder, staticFilePath);
-
-				const staticFileContent = await readFile(staticFilePath, 'utf8');
-
-				console.log(
-					'STATIC FILE2',
-					staticFolder,
-					staticFilePath,
-					staticFileContent,
-					'---------',
-					extname(staticFilePath).replace(/^\./, ''),
-					MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
-					mapHeadersToAwsHeaders({
-						'Content-Type':
-							MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
-					})
-				);
-
-				return {
-					status: 200,
-					body: staticFileContent,
-					headers: mapHeadersToAwsHeaders({
-						'Content-Type':
-							MIME_TYPES[extname(staticFilePath).replace(/^\./, '')],
-					}),
+			if (isStaticPath(request.method || 'GET', url)) {
+				// env variables here
+				const AWS_REGION = 'us-east-1';
+				const S3_DOMAIN_NAME = 'XXX';
+				
+				request.origin = {
+					s3: {
+						region: AWS_REGION,
+						domainName: S3_DOMAIN_NAME,
+						authMethod: 'none',
+					},
 				};
+				return request;
 			}
-
-			const options: RequestInit = {
-				method: requestMethod || 'GET',
-				headers: [],
-				body: event.body,
-			};
 
 			const serverRequestEv: ServerRequestEvent<APIGatewayProxyResult> = {
 				mode: 'server',
@@ -185,8 +108,10 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 						return process.env[key];
 					},
 				},
-				// @ts-ignore
-				request: new Request(url, options),
+				request: new Request(url, {
+					method: request.method || 'GET',
+					headers: [],
+				}),
 				getWritableStream: (status, headers, cookies, resolve) => {
 					let bodyChunk = new Uint8Array();
 					const response: any = {
@@ -218,13 +143,11 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 			};
 
 			// send request to qwik city request handler
-			console.log('handledResponse-pre', fullPath);
 			const handledResponse = await requestHandler(
 				serverRequestEv,
 				opts,
 				qwikSerializer
 			);
-			console.log('handledResponse', handledResponse);
 			if (handledResponse) {
 				handledResponse.completion.then((err) => {
 					if (err) {
@@ -232,19 +155,32 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 					}
 				});
 				const response = await handledResponse.response;
-				console.log('----response----', response);
-
 				if (response) {
 					return response;
 				}
 			}
 
-			// TODO: not found
-		} catch (e: any) {
-			console.error(e);
+			// qwik city did not have a route for this request
+			// response with 404 for this pathname
+			const notFoundHtml = getNotFound(url.pathname);
+			return {
+				status: 404,
+				headers: mapHeadersToAwsHeaders({
+					...defaultHeaders,
+					'Content-Type': 'text/html; charset=utf-8',
+					'X-Not-Found': url.pathname,
+				}),
+				body: notFoundHtml,
+			};
+		} catch (e: unknown) {
 			return {
 				status: 500,
-				headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+				headers: mapHeadersToAwsHeaders({
+					...defaultHeaders,
+					'Content-Type': 'text/html; charset=utf-8',
+					'X-Not-Found': url.pathname,
+				}),
+				body: String(e || 'Error'),
 			};
 		}
 	}
@@ -282,10 +218,8 @@ export function qwikCity(render: Render, opts?: RenderOptions) {
 
 const mapHeadersToAwsHeaders = (headers = {}) => {
 	const awsHeaders: any = {};
-	console.log('headers', headers);
 	Object.entries(headers).forEach(([key, value]) => {
 		awsHeaders[key.toLocaleLowerCase()] = [{ key, value }];
 	});
-	console.log('awsHeaders', awsHeaders);
 	return awsHeaders;
 };
