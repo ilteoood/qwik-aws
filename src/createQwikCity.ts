@@ -111,6 +111,11 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 				request: new Request(url, {
 					method: request.method || 'GET',
 					headers: mapAwsHeadersToHttpHeader(request.headers),
+					body: request.body?.data
+						? request.body.encoding === 'base64'
+							? Buffer.from(request.body.data, 'base64').toString()
+							: request.body.data
+						: undefined,
 				}),
 				getWritableStream: (status, headers, cookies, resolve) => {
 					let bodyChunk = new Uint8Array();
