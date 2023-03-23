@@ -87,7 +87,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 				// env variables here
 				const AWS_REGION = 'us-east-1';
 				const S3_DOMAIN_NAME = 'XXX';
-				
+
 				request.origin = {
 					s3: {
 						region: AWS_REGION,
@@ -110,7 +110,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 				},
 				request: new Request(url, {
 					method: request.method || 'GET',
-					headers: [],
+					headers: mapAwsHeadersToHttpHeader(request.headers),
 				}),
 				getWritableStream: (status, headers, cookies, resolve) => {
 					let bodyChunk = new Uint8Array();
@@ -122,7 +122,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 					mergeHeadersCookies(headers, cookies).forEach(
 						(value, key) => (response.headers![key] = value)
 					);
-					response.headers = mapHeadersToAwsHeaders(response.headers);
+					response.headers = mapHttpHeadersToAwsHeaders(response.headers);
 					return new WritableStream({
 						write(chunk: Uint8Array) {
 							if (bodyChunk instanceof Uint8Array) {
@@ -165,7 +165,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 			const notFoundHtml = getNotFound(url.pathname);
 			return {
 				status: 404,
-				headers: mapHeadersToAwsHeaders({
+				headers: mapHttpHeadersToAwsHeaders({
 					...defaultHeaders,
 					'Content-Type': 'text/html; charset=utf-8',
 					'X-Not-Found': url.pathname,
@@ -175,7 +175,7 @@ export function createQwikCity(opts: QwikCityAzureOptions) {
 		} catch (e: unknown) {
 			return {
 				status: 500,
-				headers: mapHeadersToAwsHeaders({
+				headers: mapHttpHeadersToAwsHeaders({
 					...defaultHeaders,
 					'Content-Type': 'text/html; charset=utf-8',
 					'X-Not-Found': url.pathname,
@@ -216,10 +216,18 @@ export function qwikCity(render: Render, opts?: RenderOptions) {
 	return createQwikCity({ render, qwikCityPlan, ...opts });
 }
 
-const mapHeadersToAwsHeaders = (headers = {}) => {
+const mapHttpHeadersToAwsHeaders = (headers = {}) => {
 	const awsHeaders: any = {};
 	Object.entries(headers).forEach(([key, value]) => {
 		awsHeaders[key.toLocaleLowerCase()] = [{ key, value }];
 	});
 	return awsHeaders;
+};
+
+const mapAwsHeadersToHttpHeader = (headers: any) => {
+	const result: Record<string, string> = {};
+	for (const key in headers) {
+		result[key] = headers[key][0].value;
+	}
+	return result;
 };

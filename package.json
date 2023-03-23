@@ -19,7 +19,8 @@
     "lint": "eslint \"src/**/*.ts*\"",
     "preview": "qwik build preview && vite preview --open",
     "start": "vite --open --mode ssr",
-    "qwik": "qwik"
+    "qwik": "qwik",
+    "create": "rm -rf .aws-edge && npm run build && cp -r .aws-edge ../edge-rendering-with-lambda"
   },
   "devDependencies": {
     "@builder.io/qwik": "0.22.1",
